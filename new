@@ -1,0 +1,196 @@
+--[[
+    Combined: DIO.EXE Auto‑Farm + Server Hopper GUI
+    - Loads the main auto‑farm script from GitHub
+    - Adds a floating GUI to hop to random servers with free slots
+    - Auto‑re‑injects after teleport (if you set up the URL below)
+]]
+
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local LocalPlayer = Players.LocalPlayer
+
+-- ===== CONFIGURATION =====
+local AUTO_HOP_ENABLED = false   -- set to true to auto‑hop every X seconds
+local HOP_INTERVAL = 15          -- seconds between auto‑hops
+local teleporting = false        -- prevents multiple teleports
+-- =========================
+
+-- ===== LOAD THE MAIN SCRIPT =====
+loadstring(game:HttpGet("https://raw.githubusercontent.com/dio329/DIO.EXE/refs/heads/main/DIO"))()
+
+-- ===== SERVER HOP GUI =====
+pcall(function()
+    if LocalPlayer.PlayerGui:FindFirstChild("ServerHopperGUI") then
+        LocalPlayer.PlayerGui.ServerHopperGUI:Destroy()
+    end
+end)
+
+local function getServers()
+    local servers = {}
+    local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+    local success, response = pcall(game.HttpGet, game, url)
+    if not success then return servers end
+    local data = HttpService:JSONDecode(response)
+    for _, server in ipairs(data.data) do
+        if server.id ~= game.JobId and server.playing < server.maxPlayers then
+            table.insert(servers, server.id)
+        end
+    end
+    return servers
+end
+
+local function hopToRandomServer()
+    if teleporting then return end
+    teleporting = true
+    local servers = getServers()
+    if #servers == 0 then
+        warn("No servers with free slots found.")
+        teleporting = false
+        return false
+    end
+    local chosen = servers[math.random(1, #servers)]
+    TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen, LocalPlayer)
+    return true
+end
+
+local function createGUI()
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "ServerHopperGUI"
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+    local MainFrame = Instance.new("Frame")
+    MainFrame.Size = UDim2.new(0, 260, 0, 150)
+    MainFrame.Position = UDim2.new(0, 10, 0.5, -75)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    MainFrame.BackgroundTransparency = 0.2
+    MainFrame.BorderSizePixel = 0
+    MainFrame.Active = true
+    MainFrame.Draggable = true
+    MainFrame.Parent = ScreenGui
+
+    local UICorner = Instance.new("UICorner")
+    UICorner.CornerRadius = UDim.new(0, 8)
+    UICorner.Parent = MainFrame
+
+    local Title = Instance.new("TextLabel")
+    Title.Size = UDim2.new(1, 0, 0, 30)
+    Title.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    Title.Text = "Server Hopper"
+    Title.TextColor3 = Color3.new(1, 1, 1)
+    Title.Font = Enum.Font.GothamBold
+    Title.TextSize = 16
+    Title.Parent = MainFrame
+
+    local Status = Instance.new("TextLabel")
+    Status.Size = UDim2.new(1, 0, 0, 30)
+    Status.Position = UDim2.new(0, 0, 0, 35)
+    Status.BackgroundTransparency = 1
+    Status.Text = "Ready"
+    Status.TextColor3 = Color3.fromRGB(200, 200, 200)
+    Status.Font = Enum.Font.Gotham
+    Status.TextSize = 12
+    Status.Parent = MainFrame
+
+    local ServerLabel = Instance.new("TextLabel")
+    ServerLabel.Size = UDim2.new(1, 0, 0, 20)
+    ServerLabel.Position = UDim2.new(0, 0, 0, 65)
+    ServerLabel.BackgroundTransparency = 1
+    ServerLabel.Text = "Server: " .. game.JobId
+    ServerLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+    ServerLabel.Font = Enum.Font.Gotham
+    ServerLabel.TextSize = 10
+    ServerLabel.Parent = MainFrame
+
+    local HopButton = Instance.new("TextButton")
+    HopButton.Size = UDim2.new(0.8, 0, 0, 30)
+    HopButton.Position = UDim2.new(0.1, 0, 0, 90)
+    HopButton.BackgroundColor3 = Color3.fromRGB(70, 70, 70)
+    HopButton.Text = "Hop Now"
+    HopButton.TextColor3 = Color3.new(1, 1, 1)
+    HopButton.Font = Enum.Font.Gotham
+    HopButton.TextSize = 14
+    HopButton.Parent = MainFrame
+
+    local AutoToggle = Instance.new("TextButton")
+    AutoToggle.Size = UDim2.new(0.4, 0, 0, 25)
+    AutoToggle.Position = UDim2.new(0.3, 0, 0, 125)
+    AutoToggle.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    AutoToggle.Text = AUTO_HOP_ENABLED and "Auto: On" or "Auto: Off"
+    AutoToggle.TextColor3 = Color3.new(1, 1, 1)
+    AutoToggle.Font = Enum.Font.Gotham
+    AutoToggle.TextSize = 12
+    AutoToggle.Parent = MainFrame
+
+    local autoEnabled = AUTO_HOP_ENABLED
+
+    local function doHop()
+        if teleporting then
+            Status.Text = "Already hopping..."
+            return
+        end
+        Status.Text = "Fetching servers..."
+        local servers = getServers()
+        if #servers == 0 then
+            Status.Text = "No free servers found!"
+            return
+        end
+        Status.Text = "Hopping..."
+        hopToRandomServer()
+    end
+
+    HopButton.MouseButton1Click:Connect(doHop)
+
+    AutoToggle.MouseButton1Click:Connect(function()
+        autoEnabled = not autoEnabled
+        AutoToggle.Text = autoEnabled and "Auto: On" or "Auto: Off"
+        Status.Text = autoEnabled and "Auto hop started" or "Auto hop stopped"
+    end)
+
+    spawn(function()
+        while true do
+            if autoEnabled and not teleporting then
+                local startTime = tick()
+                while autoEnabled and not teleporting and (tick() - startTime) < HOP_INTERVAL do
+                    local remaining = math.ceil(HOP_INTERVAL - (tick() - startTime))
+                    Status.Text = string.format("Next hop in %d sec", remaining)
+                    task.wait(0.5)
+                end
+                if autoEnabled and not teleporting then
+                    doHop()
+                end
+            else
+                task.wait(1)
+            end
+        end
+    end)
+
+    spawn(function()
+        while true do
+            task.wait(5)
+            pcall(function()
+                ServerLabel.Text = "Server: " .. game.JobId
+            end)
+        end
+    end)
+end
+
+-- ===== PERSISTENCE (optional) =====
+local function setupPersistence()
+    local queueFunc = queue_on_teleport or (syn and syn.queue_on_teleport)
+    if queueFunc then
+        -- -----------------------------------------------------------------
+        -- OPTION: Uncomment the line below and replace the URL with the
+        -- raw URL of THIS SCRIPT (the combined one) hosted online.
+        -- -----------------------------------------------------------------
+        -- queueFunc('loadstring(game:HttpGet("https://your-raw-url.com/this_script.lua"))()')
+        print("queue_on_teleport detected. For auto‑re‑execution after teleport, you need to host this script online and set the URL above.")
+        print("If your executor has auto‑execute on join, you can ignore this message.")
+    end
+end
+
+-- Create GUI after a short delay to avoid conflicts
+task.wait(1)
+createGUI()
+setupPersistence()
