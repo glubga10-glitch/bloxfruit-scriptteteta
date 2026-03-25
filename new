@@ -184,7 +184,7 @@ local function setupPersistence()
         -- OPTION: Uncomment the line below and replace the URL with the
         -- raw URL of THIS SCRIPT (the combined one) hosted online.
         -- -----------------------------------------------------------------
-        -- queueFunc('loadstring(game:HttpGet("https://your-raw-url.com/this_script.lua"))()')
+        queueFunc('loadstring(game:HttpGet("https://raw.githubusercontent.com/glubga10-glitch/bloxfruit-scriptteteta/refs/heads/main/new"))()')
         print("queue_on_teleport detected. For auto‑re‑execution after teleport, you need to host this script online and set the URL above.")
         print("If your executor has auto‑execute on join, you can ignore this message.")
     end
